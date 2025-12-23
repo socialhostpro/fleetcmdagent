@@ -1,0 +1,96 @@
+# Fleet Agent for Windows GPU Nodes
+# Deploy with: docker-compose up -d
+#
+# This agent gives Fleet Commander full control over your Windows Docker Desktop
+
+version: '3.8'
+
+services:
+  # Fleet Agent - Reports to Fleet Commander and accepts commands
+  fleet-agent:
+    build: .
+    image: 192.168.1.214:5000/fleet-agent-windows:latest
+    container_name: fleet-agent
+    restart: always
+    ports:
+      - "9100:9100"  # Agent API for Fleet Commander
+    environment:
+      - FLEET_COMMANDER_URL=http://192.168.1.214:8765
+      - NODE_ID=${HOSTNAME}
+      - CLUSTER=windows
+      - AGENT_PORT=9100
+      - REPORT_INTERVAL=10
+      # MinIO/S3 Configuration for model sync
+      - MINIO_ENDPOINT=192.168.1.214:9010
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - MINIO_MODELS_BUCKET=fleet-models
+      - MINIO_OUTPUTS_BUCKET=fleet-outputs
+      - MINIO_LORAS_BUCKET=fleet-loras
+      - AUTO_SYNC_MODELS=true
+      - SYNC_INTERVAL=300
+    volumes:
+      # Access to Docker socket for container management
+      - //var/run/docker.sock:/var/run/docker.sock
+      # Access to host filesystem for model storage
+      - C:/ai-models:/models
+      - C:/ai-outputs:/outputs
+      - C:/ai-loras:/loras
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+# Optional GPU services - uncomment to deploy
+
+#  # ComfyUI for image generation
+#  comfyui:
+#    image: ghcr.io/ai-dock/comfyui:pytorch-2.4.0-py3.11-cuda-12.4.1-runtime-22.04
+#    container_name: comfyui
+#    restart: unless-stopped
+#    ports:
+#      - "8188:8188"
+#    environment:
+#      - CLI_ARGS=--listen 0.0.0.0
+#    volumes:
+#      - C:/ai-models/checkpoints:/workspace/ComfyUI/models/checkpoints
+#      - C:/ai-models/loras:/workspace/ComfyUI/models/loras
+#      - C:/ai-outputs:/workspace/ComfyUI/output
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: all
+#              capabilities: [gpu]
+
+#  # WAN Video Generation
+#  wan-video:
+#    image: ghcr.io/ai-dock/comfyui:pytorch-2.4.0-py3.11-cuda-12.4.1-runtime-22.04
+#    container_name: wan-video
+#    restart: unless-stopped
+#    ports:
+#      - "8189:8188"
+#    environment:
+#      - CLI_ARGS=--listen 0.0.0.0 --highvram
+#    volumes:
+#      - C:/ai-models/video:/workspace/ComfyUI/models/wan
+#      - C:/ai-outputs:/workspace/ComfyUI/output
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: all
+#              capabilities: [gpu]
+
+#  # Portainer Agent for additional management
+#  portainer-agent:
+#    image: portainer/agent:latest
+#    container_name: portainer_agent
+#    restart: always
+#    ports:
+#      - "9001:9001"
+#    volumes:
+#      - //var/run/docker.sock:/var/run/docker.sock
+#      - //var/lib/docker/volumes:/var/lib/docker/volumes

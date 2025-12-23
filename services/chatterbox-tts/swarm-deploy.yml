@@ -1,0 +1,56 @@
+# Docker Swarm Service Definition for Chatterbox-TTS
+# Deploy via: docker stack deploy -c swarm-deploy.yml voice
+
+version: '3.8'
+
+services:
+  chatterbox-tts:
+    image: 192.168.1.214:5000/chatterbox-tts:r35.2.1
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.cluster==voice
+          - node.labels.nvidia==true
+      resources:
+        reservations:
+          generic_resources:
+            - discrete_resource_spec:
+                kind: 'gpu'
+                value: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      labels:
+        - "fleet.cluster=voice"
+        - "fleet.service=tts"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - DEVICE=cuda
+      - PORT=8100
+      - VOICES_DIR=/voices
+      - MODELS_DIR=/models
+      - DEFAULT_VOICE=jessica.wav
+    volumes:
+      - /mnt/s3-models:/models
+      - /mnt/s3-outputs:/outputs
+      - /mnt/s3-voices:/voices
+    ports:
+      - target: 8100
+        published: 8100
+        mode: ingress
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - fleet-network
+
+networks:
+  fleet-network:
+    driver: overlay
+    attachable: true

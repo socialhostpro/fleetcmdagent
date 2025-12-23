@@ -1,0 +1,605 @@
+# FLEET COMMANDER - MASTER PLAN & PROMPT
+
+## PROJECT OVERVIEW
+
+**Name:** Fleet Commander  
+**Purpose:** Visual cluster management platform for 15+ Jetson AGX Xavier nodes controlled from DGX Spark  
+**Style:** n8n-style canvas, animated, graphical, real-time traffic visualization
+
+---
+
+## INFRASTRUCTURE REQUIREMENTS
+
+### Central Hub (DGX Spark)
+- **Portainer Business/CE** - Main container management UI
+- **MinIO S3** - Already installed, shared storage for all nodes
+- **Traefik** - Reverse proxy and load balancer
+- **Cloudflare Tunnel** - Secure external access
+- **Docker Swarm Manager** - Orchestration control plane
+- **Fleet Commander UI** - Custom React canvas interface
+- **Redis** - Real-time pub/sub and caching
+- **PostgreSQL** - Configuration and state storage
+
+### Worker Nodes (Each AGX Xavier)
+- **Docker Engine** - Container runtime
+- **Portainer Agent** - Connects to Spark Portainer
+- **Fleet Agent** - Custom metrics/control daemon
+- **MinIO Client (mc)** - S3 access to Spark storage
+- **Docker Swarm Worker** - Part of swarm cluster
+
+---
+
+## NETWORK TOPOLOGY
+
+```
+                         INTERNET
+                             │
+                    ┌────────┴────────┐
+                    │ Cloudflare      │
+                    │ Tunnel          │
+                    └────────┬────────┘
+                             │
+┌────────────────────────────┼────────────────────────────┐
+│                      DGX SPARK                          │
+│                    192.168.1.100                        │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ Docker Swarm Manager                            │   │
+│  │ ├── Portainer (9443)                            │   │
+│  │ ├── Traefik (80/443/8080)                       │   │
+│  │ ├── MinIO S3 (9000/9001)                        │   │
+│  │ ├── Fleet Commander UI (3000)                   │   │
+│  │ ├── Fleet Commander API (8765)                  │   │
+│  │ ├── Redis (6379)                                │   │
+│  │ └── PostgreSQL (5432)                           │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  NFS Share: /mnt/models (mounted by all Xaviers)       │
+│  S3 Bucket: s3://fleet-data (accessible by all)        │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+       ┌──────────────┼──────────────┐
+       │              │              │
+┌──────┴──────┐ ┌─────┴─────┐ ┌──────┴──────┐
+│   AGX #1    │ │   AGX #2  │ │   AGX #N    │
+│   .101      │ │   .102    │ │   .1XX      │
+│ ┌─────────┐ │ │┌─────────┐│ │ ┌─────────┐ │
+│ │Portainer│ │ ││Portainer││ │ │Portainer│ │
+│ │Agent    │ │ ││Agent    ││ │ │Agent    │ │
+│ ├─────────┤ │ │├─────────┤│ │ ├─────────┤ │
+│ │Fleet    │ │ ││Fleet    ││ │ │Fleet    │ │
+│ │Agent    │ │ ││Agent    ││ │ │Agent    │ │
+│ ├─────────┤ │ │├─────────┤│ │ ├─────────┤ │
+│ │Swarm    │ │ ││Swarm    ││ │ │Swarm    │ │
+│ │Worker   │ │ ││Worker   ││ │ │Worker   │ │
+│ └─────────┘ │ │└─────────┘│ │ └─────────┘ │
+└─────────────┘ └───────────┘ └─────────────┘
+```
+
+---
+
+## PHASE 1: SPARK INFRASTRUCTURE SETUP
+
+### 1.1 MinIO S3 Configuration (If not done)
+```yaml
+# Buckets to create:
+- fleet-backups      # Node backups
+- fleet-configs      # Shared configurations  
+- fleet-models       # AI models (existing)
+- fleet-artifacts    # Build artifacts
+- fleet-logs         # Centralized logs
+```
+
+### 1.2 Portainer Setup on Spark
+- Install Portainer Business/CE
+- Configure for Docker Swarm management
+- Create agent endpoint group for Xaviers
+- Set up Edge Agent key for node enrollment
+
+### 1.3 Docker Swarm Initialization
+```bash
+# On Spark
+docker swarm init --advertise-addr 192.168.1.100
+
+# Save join token
+docker swarm join-token worker
+```
+
+### 1.4 Overlay Network Creation
+```bash
+# Create overlay network for all services
+docker network create \
+  --driver overlay \
+  --attachable \
+  --subnet 10.10.0.0/16 \
+  fleet-network
+```
+
+### 1.5 Traefik + Cloudflare Tunnel
+- Traefik as ingress controller
+- Cloudflare tunnel for external access
+- SSL termination
+- Dashboard access
+
+---
+
+## PHASE 2: NODE BOOTSTRAP SYSTEM
+
+### 2.1 Bootstrap Script Requirements
+Each Xavier needs automated setup script that:
+
+1. **System Prep**
+   - Update apt packages
+   - Install Docker CE
+   - Configure Docker daemon for Swarm
+   - Set up NFS mount to Spark
+
+2. **S3 Client Setup**
+   - Install MinIO client (mc)
+   - Configure alias to Spark MinIO
+   - Test connectivity
+
+3. **Portainer Agent**
+   - Pull and run Portainer Agent
+   - Connect to Spark Portainer
+   - Register with Edge ID
+
+4. **Docker Swarm Join**
+   - Get join token from Spark
+   - Join as worker node
+   - Verify membership
+
+5. **Fleet Agent**
+   - Install custom monitoring agent
+   - Configure metrics reporting
+   - Start systemd service
+
+6. **Recovery/Boot Script**
+   - Systemd service for auto-recovery
+   - Reconnect to swarm on boot
+   - Re-establish S3 and Portainer connections
+   - Health check and self-healing
+
+### 2.2 Node Configuration File
+```yaml
+# /etc/fleet/node.yml
+node_id: agx-01
+node_name: "AGX Xavier 1"
+spark_ip: 192.168.1.100
+local_ip: 192.168.1.101
+
+s3:
+  endpoint: http://192.168.1.100:9000
+  access_key: ${S3_ACCESS_KEY}
+  secret_key: ${S3_SECRET_KEY}
+  bucket: fleet-data
+
+portainer:
+  url: https://192.168.1.100:9443
+  edge_id: ${EDGE_ID}
+  edge_key: ${EDGE_KEY}
+
+swarm:
+  manager: 192.168.1.100:2377
+  token: ${SWARM_TOKEN}
+
+nfs:
+  server: 192.168.1.100
+  share: /mnt/models
+  mount: /mnt/spark-models
+```
+
+---
+
+## PHASE 3: FLEET COMMANDER UI
+
+### 3.1 Canvas Interface Features
+
+**Node Visualization**
+- Drag-drop node arrangement
+- Real-time status indicators (online/offline/warning)
+- Animated connections showing traffic flow
+- Click node to expand details panel
+- Right-click context menu (terminal, logs, restart, etc.)
+
+**Traffic Animation**
+- Particle effects along connection lines
+- Color-coded by traffic type (data, control, backup)
+- Bandwidth indicators
+- Latency visualization
+
+**Node Details Panel**
+- System metrics (CPU, RAM, GPU, Temp)
+- Docker containers list
+- Running services
+- Quick actions (restart, update, backup)
+- Direct terminal access button
+
+### 3.2 Terminal System
+
+**Embedded Terminal**
+- xterm.js based
+- WebSocket to backend SSH proxy
+- Multi-tab support
+- Pop-out to separate window
+- Command history per node
+
+**Batch Command Execution**
+- Select multiple nodes
+- Run command on all selected
+- Aggregate results display
+- Parallel execution
+
+### 3.3 Docker Swarm Control
+
+**Service Management**
+- List all swarm services
+- Create new service (form + CLI)
+- Scale replicas slider
+- Rolling update controls
+- Service logs viewer
+
+**Stack Deployment**
+- Upload docker-compose.yml
+- Deploy as stack
+- Stack status monitoring
+- Remove stack
+
+**Node Management**
+- View swarm nodes
+- Drain/Activate nodes
+- Remove from swarm
+- Promote to manager
+
+### 3.4 Network Tools
+
+**Topology View**
+- Auto-discovered network map
+- LAN scanner
+- WAN connectivity checker
+- Port scanner per device
+- Service discovery
+
+**Traffic Monitor**
+- Real-time bandwidth per node
+- Connection tracker
+- Latency measurements
+- Packet loss indicators
+
+### 3.5 Backup System
+
+**Backup Features**
+- Scheduled backups to S3
+- Manual backup trigger
+- Per-node or cluster-wide
+- Incremental backups
+- Backup browser/restore UI
+
+**Backup Targets**
+- Docker volumes
+- Configuration files
+- Swarm state
+- Custom paths
+
+---
+
+## PHASE 4: CLAUDE CODE INTEGRATION
+
+### 4.1 MCP Server for Fleet Commander
+```json
+{
+  "name": "fleet-commander",
+  "description": "Manage Jetson cluster from Claude Code",
+  "tools": [
+    "fleet_status",
+    "fleet_node_list", 
+    "fleet_node_exec",
+    "fleet_docker_ps",
+    "fleet_docker_logs",
+    "fleet_service_create",
+    "fleet_service_scale",
+    "fleet_backup_create",
+    "fleet_network_scan"
+  ]
+}
+```
+
+### 4.2 Example Claude Code Commands
+```
+> fleet status
+Cluster: online (16/16 nodes)
+Services: 12 running
+Storage: 2.1TB / 4TB used
+
+> fleet node exec agx-01 "nvidia-smi"
+[executes nvidia-smi on agx-01]
+
+> fleet service create inference --image jessica:v2 --replicas 15
+Creating service 'inference' with 15 replicas...
+Service deployed successfully.
+
+> fleet backup create --all
+Starting backup of 16 nodes to s3://fleet-backups/...
+```
+
+---
+
+## PHASE 5: BOOT & RECOVERY SYSTEM
+
+### 5.1 Node Boot Sequence
+```
+1. System boot
+2. Network up (wait for DHCP/static)
+3. Mount NFS from Spark
+4. Start Docker daemon
+5. fleet-recovery.service starts:
+   a. Ping Spark - retry until success
+   b. Check swarm membership - rejoin if needed
+   c. Check Portainer agent - restart if needed
+   d. Pull latest configs from S3
+   e. Report ready to Fleet Commander API
+6. Start application containers
+```
+
+### 5.2 Recovery Script Logic
+```bash
+#!/bin/bash
+# /usr/local/bin/fleet-recovery.sh
+
+SPARK_IP="192.168.1.100"
+MAX_RETRIES=30
+RETRY_DELAY=10
+
+# Wait for Spark
+wait_for_spark() {
+    for i in $(seq 1 $MAX_RETRIES); do
+        if ping -c 1 $SPARK_IP &>/dev/null; then
+            return 0
+        fi
+        sleep $RETRY_DELAY
+    done
+    return 1
+}
+
+# Check/rejoin swarm
+ensure_swarm() {
+    if ! docker info | grep -q "Swarm: active"; then
+        TOKEN=$(curl -s http://$SPARK_IP:8765/api/swarm/join-token)
+        docker swarm join --token $TOKEN $SPARK_IP:2377
+    fi
+}
+
+# Check Portainer agent
+ensure_portainer() {
+    if ! docker ps | grep -q portainer_agent; then
+        docker start portainer_agent || deploy_portainer_agent
+    fi
+}
+
+# Main
+wait_for_spark
+ensure_swarm
+ensure_portainer
+report_ready
+```
+
+### 5.3 Cleanup Script
+```bash
+#!/bin/bash
+# /usr/local/bin/fleet-cleanup.sh
+
+# Stop non-essential containers
+docker stop $(docker ps -q --filter "label!=fleet.essential=true")
+
+# Prune system
+docker system prune -af --volumes
+
+# Clear logs
+truncate -s 0 /var/log/*.log
+journalctl --vacuum-time=1d
+
+# Clear temp
+rm -rf /tmp/*
+rm -rf /var/tmp/*
+
+# Sync to S3 before cleanup
+mc mirror /etc/fleet/ spark/fleet-configs/$(hostname)/
+```
+
+---
+
+## NODE INVENTORY TEMPLATE
+
+```yaml
+# nodes.yml - Define your fleet
+nodes:
+  - id: spark
+    name: "DGX Spark"
+    ip: 192.168.1.100
+    type: manager
+    role: control-plane
+    
+  - id: agx-01
+    name: "AGX Xavier 1"
+    ip: 192.168.1.101
+    type: xavier
+    role: worker
+    
+  - id: agx-02
+    name: "AGX Xavier 2"  
+    ip: 192.168.1.102
+    type: xavier
+    role: worker
+    
+  # ... repeat for all 15 nodes
+  
+  - id: agx-15
+    name: "AGX Xavier 15"
+    ip: 192.168.1.115
+    type: xavier
+    role: worker
+```
+
+---
+
+## PROMPT FOR CLAUDE CODE IMPLEMENTATION
+
+```
+I need to build Fleet Commander - a visual cluster management system for my Jetson AGX Xavier fleet.
+
+ENVIRONMENT:
+- Control plane: DGX Spark (192.168.1.100) running Ubuntu with Docker
+- Worker nodes: 15x Jetson AGX Xavier running JetPack 4.6
+- Existing: MinIO S3 on Spark, NFS share at /mnt/models
+- Network: All on 192.168.1.0/24 subnet
+
+REQUIREMENTS:
+
+1. SPARK SETUP (docker-compose):
+   - Portainer CE/Business for container management
+   - Traefik reverse proxy  
+   - Cloudflare tunnel for external access
+   - Redis for real-time data
+   - PostgreSQL for state
+   - Fleet Commander API (FastAPI)
+   - Fleet Commander UI (React)
+
+2. NODE BOOTSTRAP SCRIPT:
+   - Single script to run on each Xavier
+   - Installs Docker, joins swarm, deploys Portainer agent
+   - Configures MinIO client for S3 access
+   - Installs fleet monitoring agent
+   - Creates systemd boot recovery service
+   - Configurable via environment variables
+
+3. FLEET COMMANDER UI:
+   - React with TypeScript
+   - React Flow for n8n-style canvas
+   - Framer Motion for animations
+   - xterm.js for embedded terminals
+   - Real-time metrics via WebSocket
+   - Features:
+     * Drag-drop node canvas with animated connections
+     * Traffic flow visualization (particles along edges)
+     * Click node for details panel
+     * Pop-out terminal windows
+     * Docker Swarm management (services, stacks)
+     * Network topology discovery
+     * Backup management to S3
+     * Batch command execution
+
+4. FLEET COMMANDER API:
+   - FastAPI with async
+   - SSH to all nodes via asyncssh
+   - Docker SDK for swarm control
+   - Network scanning (nmap/arp)
+   - Metrics collection
+   - WebSocket for terminals and live data
+   - S3 backup orchestration
+
+5. PORTAINER INTEGRATION:
+   - Portainer on Spark as main UI
+   - Portainer Agent on each Xavier
+   - All agents connect to Spark Portainer
+   - Shared edge environment
+
+6. DOCKER NETWORKING:
+   - Overlay network "fleet-network" spanning all nodes
+   - All services attachable to this network
+   - Swarm service discovery
+
+7. S3 STORAGE:
+   - All nodes access MinIO on Spark
+   - Buckets: backups, configs, models, logs
+   - Credentials distributed via bootstrap
+
+8. BOOT RECOVERY:
+   - Systemd service on each node
+   - Auto-rejoin swarm after reboot
+   - Reconnect Portainer agent
+   - Pull latest configs from S3
+   - Health reporting to control plane
+
+9. CLEANUP UTILITIES:
+   - Docker prune scripts
+   - Log rotation
+   - Temp cleanup
+   - Pre-cleanup S3 sync
+
+10. CLAUDE CODE MCP:
+    - MCP server for Fleet Commander API
+    - Commands: status, exec, deploy, scale, backup, scan
+
+Generate the implementation in phases:
+- Phase 1: Spark docker-compose and infrastructure
+- Phase 2: Node bootstrap script
+- Phase 3: Fleet Commander API
+- Phase 4: Fleet Commander UI
+- Phase 5: Boot recovery and cleanup scripts
+- Phase 6: Claude Code MCP integration
+
+Start with Phase 1.
+```
+
+---
+
+## FILE STRUCTURE
+
+```
+fleet-commander/
+├── docker-compose.yml          # Spark services
+├── .env                        # Secrets
+├── README.md
+│
+├── spark/                      # Spark-specific configs
+│   ├── traefik/
+│   │   ├── traefik.yml
+│   │   └── dynamic/
+│   ├── cloudflare/
+│   │   └── config.yml
+│   ├── portainer/
+│   │   └── portainer-agent-stack.yml
+│   └── minio/
+│       └── policies/
+│
+├── bootstrap/                  # Node setup
+│   ├── bootstrap-node.sh       # Main setup script
+│   ├── fleet-agent/            # Monitoring agent
+│   ├── recovery/               # Boot recovery
+│   │   ├── fleet-recovery.sh
+│   │   └── fleet-recovery.service
+│   └── cleanup/
+│       └── fleet-cleanup.sh
+│
+├── backend/                    # FastAPI
+│   ├── main.py
+│   ├── config.py
+│   ├── api/
+│   ├── services/
+│   └── requirements.txt
+│
+├── frontend/                   # React UI
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── mcp/                        # Claude Code integration
+│   ├── fleet-mcp-server/
+│   └── mcp-config.json
+│
+└── docs/
+    ├── setup-guide.md
+    ├── node-bootstrap.md
+    └── api-reference.md
+```
+
+---
+
+## NEXT STEPS
+
+1. **Confirm this plan** - Any changes or additions?
+2. **Provide node IPs** - List all 15 Xavier IPs
+3. **S3 credentials** - MinIO access/secret keys
+4. **SSH setup** - Confirm SSH key access to all nodes
+5. **Start Phase 1** - Spark infrastructure
+
+Ready to proceed?

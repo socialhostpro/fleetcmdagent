@@ -1,0 +1,43 @@
+# Bytebot - AI Desktop Agent
+# Note: x86-64 only (runs on SPARK, not Jetson AGX)
+# Web UI: http://localhost:9992
+# API: http://localhost:9991
+
+version: '3.8'
+
+services:
+  bytebot:
+    image: ghcr.io/bytebot-ai/bytebot:latest
+    container_name: bytebot
+    restart: unless-stopped
+    environment:
+      # AI Provider (use Anthropic Claude for best results)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Or OpenAI
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Or Ollama (local)
+      # - OLLAMA_BASE_URL=http://ollama:11434
+
+      # Desktop settings
+      - DISPLAY_WIDTH=1920
+      - DISPLAY_HEIGHT=1080
+      - VNC_PASSWORD=bytebot
+    volumes:
+      # Persist workspace and downloads
+      - /mnt/s3-workspace:/workspace
+      - /mnt/s3-outputs:/outputs
+      - bytebot-data:/data
+    ports:
+      - "9990:9990"  # Desktop control API
+      - "9991:9991"  # Task API
+      - "9992:9992"  # Web UI
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+
+volumes:
+  bytebot-data:

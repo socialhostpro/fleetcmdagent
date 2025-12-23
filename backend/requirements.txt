@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+redis
+asyncpg
+minio
+httpx
+docker
+python-multipart
+websockets
+asyncssh
+pydantic-settings
+boto3

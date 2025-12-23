@@ -1,0 +1,20 @@
+# Chatterbox-Turbo TTS Dependencies for JetPack 5.1+
+# Note: PyTorch should be installed from NVIDIA's JetPack wheels
+
+# Core TTS
+chatterbox-tts>=0.1.0
+
+# Audio processing
+torchaudio>=2.0.0
+soundfile>=0.12.0
+librosa>=0.10.0
+
+# API Server
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6
+
+# Utilities
+pydantic>=2.0.0
+httpx>=0.24.0
+numpy>=1.24.0

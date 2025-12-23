@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  chatterbox-tts:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: nvcr.io/nvidia/l4t-pytorch:r35.2.1-pth2.0-py3
+    image: 192.168.1.214:5000/chatterbox-tts:r35.2.1
+    container_name: chatterbox-tts
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - DEVICE=cuda
+      - PORT=8100
+      - VOICES_DIR=/voices
+      - MODELS_DIR=/models
+    volumes:
+      # Mount S3 volumes for shared access
+      - /mnt/s3-models:/models
+      - ./voices:/voices
+    ports:
+      - "8100:8100"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

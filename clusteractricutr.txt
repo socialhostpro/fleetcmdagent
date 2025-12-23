@@ -1,0 +1,563 @@
+# JESSICA DISTRIBUTED AI CLUSTER
+## Dynamic Workload Architecture
+
+---
+
+## CLUSTER TOPOLOGY
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            DGX SPARK (ORCHESTRATOR)                         │
+│                              192.168.1.100                                  │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │  CONTROL PLANE                                                      │    │
+│  │  • Jessica Core (brain, routing, decisions)                         │    │
+│  │  • Job Queue (Redis)                                                │    │
+│  │  • Model Registry (S3)                                              │    │
+│  │  • Fleet Commander UI                                               │    │
+│  │  • Portainer                                                        │    │
+│  │  • Traefik / Cloudflare                                            │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────┐
+        │                             │                             │
+        ▼                             ▼                             ▼
+┌───────────────────┐    ┌───────────────────┐    ┌───────────────────┐
+│  DEDICATED PODS   │    │  DEDICATED PODS   │    │   ROAMER POOL     │
+│  (Always Running) │    │  (Always Running) │    │   (Ephemeral)     │
+└───────────────────┘    └───────────────────┘    └───────────────────┘
+```
+
+---
+
+## NODE ASSIGNMENT (15 AGX + 1 Spark)
+
+### DEDICATED CLUSTERS (10 nodes)
+
+| Cluster | Nodes | Purpose | Always Running |
+|---------|-------|---------|----------------|
+| **VISION** | AGX-01, AGX-02 | SDXL image generation | Yes |
+| **VIDEO** | AGX-03, AGX-04 | WAN 2.1 video generation | Yes |
+| **VOICE** | AGX-05 | TTS (Bark/XTTS/F5) | Yes |
+| **AUDIO** | AGX-06 | Music generation (MusicGen/AudioCraft) | Yes |
+| **BRAIN** | AGX-07, AGX-08 | LLM inference (Jessica reasoning) | Yes |
+| **EYES** | AGX-09 | Camera processing (4x cameras) | Yes |
+| **JESSICA** | AGX-10 | Jessica personality/memory/emotion | Yes |
+
+### ROAMER POOL (5 nodes)
+
+| Node | Default State | Behavior |
+|------|---------------|----------|
+| AGX-11 | IDLE (clean) | Spins up on demand |
+| AGX-12 | IDLE (clean) | Spins up on demand |
+| AGX-13 | IDLE (clean) | Spins up on demand |
+| AGX-14 | IDLE (clean) | Spins up on demand |
+| AGX-15 | IDLE (clean) | Spins up on demand |
+
+---
+
+## ROAMER BEHAVIOR
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      ROAMER LIFECYCLE                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   IDLE ──────► ASSIGNED ──────► PROVISIONING ──────► RUNNING   │
+│     ▲                                                    │      │
+│     │                                                    │      │
+│     └──────────────── CLEANUP ◄──────────────────────────┘      │
+│                                                                 │
+│   States:                                                       │
+│   • IDLE: Clean system, no containers, waiting for work         │
+│   • ASSIGNED: Job received, preparing to provision              │
+│   • PROVISIONING: Pulling images, loading models from S3        │
+│   • RUNNING: Executing workload                                 │
+│   • CLEANUP: Stopping containers, pruning, returning to IDLE    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Roamer Use Cases
+
+1. **Overflow** - SDXL cluster busy → roamer becomes temporary SDXL node
+2. **Burst** - Big video render job → multiple roamers join VIDEO cluster  
+3. **Special** - One-off task (training, conversion) → roamer handles it
+4. **Backup** - Dedicated node fails → roamer takes over
+5. **Experimental** - Testing new models before dedicating resources
+
+### Roamer Provisioning Speed
+
+To make roamers fast, pre-cache on S3:
+- Docker images (pulled from local registry, not Docker Hub)
+- Model weights (mounted from NFS, not downloaded)
+- Configs (pulled from S3)
+
+**Target: IDLE → RUNNING in < 60 seconds**
+
+---
+
+## SERVICE ARCHITECTURE
+
+### SPARK SERVICES
+
+```yaml
+# Core orchestration
+jessica-core:        # Main brain, routes requests
+job-queue:           # Redis-based job distribution  
+model-registry:      # S3 bucket with all model weights
+service-mesh:        # Traefik for internal routing
+api-gateway:         # External API (Cloudflare tunnel)
+
+# Management
+fleet-commander:     # UI for cluster management
+portainer:           # Container management
+prometheus:          # Metrics collection
+```
+
+### DEDICATED CLUSTER SERVICES
+
+```yaml
+# VISION CLUSTER (AGX-01, AGX-02)
+sdxl-api:
+  replicas: 2
+  image: jessica/sdxl:latest
+  gpu: true
+  models:
+    - sdxl-base-1.0
+    - sdxl-refiner-1.0
+    - controlnet-*
+    - loras/*
+
+# VIDEO CLUSTER (AGX-03, AGX-04)  
+wan-api:
+  replicas: 2
+  image: jessica/wan:latest
+  gpu: true
+  models:
+    - wan-2.1-i2v
+    - wan-2.1-t2v
+
+# VOICE CLUSTER (AGX-05)
+tts-api:
+  replicas: 1
+  image: jessica/tts:latest
+  gpu: true
+  models:
+    - xtts-v2
+    - bark
+    - f5-tts
+
+# AUDIO CLUSTER (AGX-06)
+music-api:
+  replicas: 1
+  image: jessica/music:latest
+  gpu: true
+  models:
+    - musicgen-large
+    - audiogen
+
+# BRAIN CLUSTER (AGX-07, AGX-08)
+llm-api:
+  replicas: 2
+  image: jessica/llm:latest
+  gpu: true
+  models:
+    - llama-3.1-70b-4bit  # or whatever fits
+    - mistral-nemo
+    
+# EYES CLUSTER (AGX-09)
+camera-api:
+  replicas: 1
+  image: jessica/vision:latest
+  gpu: true
+  devices:
+    - /dev/video0
+    - /dev/video1
+    - /dev/video2
+    - /dev/video3
+  models:
+    - yolov8
+    - depth-anything
+    - face-recognition
+
+# JESSICA CLUSTER (AGX-10)
+jessica-personality:
+  replicas: 1
+  image: jessica/personality:latest
+  gpu: true
+  components:
+    - emotion-engine
+    - memory-system
+    - creativity-module
+```
+
+### ROAMER SERVICE TEMPLATES
+
+```yaml
+# Templates that roamers can spin up
+templates:
+  sdxl-worker:
+    image: jessica/sdxl:latest
+    startup_time: 45s
+    
+  wan-worker:
+    image: jessica/wan:latest
+    startup_time: 60s
+    
+  llm-worker:
+    image: jessica/llm:latest
+    startup_time: 30s
+    
+  tts-worker:
+    image: jessica/tts:latest
+    startup_time: 20s
+    
+  generic-worker:
+    image: jessica/base:latest
+    startup_time: 10s
+```
+
+---
+
+## JOB QUEUE SYSTEM
+
+### Queue Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      JESSICA CORE (SPARK)                       │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │                     JOB ROUTER                             │ │
+│  │  • Receives requests from API                              │ │
+│  │  • Determines job type (image/video/voice/etc)             │ │
+│  │  • Checks dedicated cluster capacity                       │ │
+│  │  • If busy → assigns to roamer                             │ │
+│  │  • Tracks job status                                       │ │
+│  └───────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+   ┌──────────┐        ┌──────────┐        ┌──────────┐
+   │ VISION   │        │ VIDEO    │        │ ROAMER   │
+   │ QUEUE    │        │ QUEUE    │        │ QUEUE    │
+   │ ───────  │        │ ───────  │        │ ───────  │
+   │ job1     │        │ job4     │        │ job7     │
+   │ job2     │        │ job5     │        │ job8     │
+   │ job3     │        │ job6     │        │          │
+   └──────────┘        └──────────┘        └──────────┘
+```
+
+### Job Flow Example
+
+```
+1. User: "Generate an image of a sunset"
+2. API Gateway receives request
+3. Jessica Core:
+   - Parses intent → IMAGE generation
+   - Checks VISION cluster → 2/2 nodes busy
+   - Checks ROAMER pool → AGX-11 available
+   - Assigns job to AGX-11
+4. AGX-11 (Roamer):
+   - Receives assignment
+   - Pulls sdxl-worker template
+   - Loads SDXL model from NFS
+   - Generates image
+   - Uploads result to S3
+   - Reports completion
+   - Runs cleanup
+   - Returns to IDLE
+5. Jessica Core:
+   - Retrieves result from S3
+   - Returns to user
+```
+
+---
+
+## ROAMER MANAGEMENT
+
+### Fleet Agent on Roamers
+
+```python
+# /opt/fleet-agent/roamer.py
+
+class RoamerAgent:
+    states = ['IDLE', 'ASSIGNED', 'PROVISIONING', 'RUNNING', 'CLEANUP']
+    
+    def __init__(self):
+        self.state = 'IDLE'
+        self.current_job = None
+        
+    async def heartbeat(self):
+        """Report status to Spark every 5s"""
+        while True:
+            await report_status(self.state, self.current_job)
+            await asyncio.sleep(5)
+    
+    async def listen_for_jobs(self):
+        """Subscribe to roamer job queue"""
+        async for job in redis.subscribe('roamer:jobs'):
+            if job['target'] == self.node_id:
+                await self.handle_job(job)
+    
+    async def handle_job(self, job):
+        self.state = 'ASSIGNED'
+        self.current_job = job
+        
+        # Provision
+        self.state = 'PROVISIONING'
+        await self.provision(job['template'])
+        
+        # Run
+        self.state = 'RUNNING'
+        result = await self.execute(job)
+        
+        # Cleanup
+        self.state = 'CLEANUP'
+        await self.cleanup()
+        
+        # Done
+        self.state = 'IDLE'
+        self.current_job = None
+        
+    async def provision(self, template):
+        """Fast provisioning from local cache"""
+        # Pull from local registry (not Docker Hub)
+        await docker.pull(f"spark:5000/{template['image']}")
+        # Models already on NFS, just mount
+        
+    async def cleanup(self):
+        """Return to clean state"""
+        await docker.stop_all()
+        await docker.prune()
+        await clear_temp()
+        # Don't remove images - keep cached for speed
+```
+
+### Auto-Scaling Logic
+
+```python
+# On Spark - decides when to spin up roamers
+
+class AutoScaler:
+    def check_scaling(self):
+        for cluster in ['vision', 'video', 'voice', 'brain']:
+            queue_depth = get_queue_depth(cluster)
+            active_workers = get_active_workers(cluster)
+            
+            # Scale up if queue backing up
+            if queue_depth > active_workers * 2:
+                idle_roamers = get_idle_roamers()
+                if idle_roamers:
+                    assign_roamer(idle_roamers[0], cluster)
+                    
+            # Could also implement predictive scaling
+            # based on time of day, patterns, etc.
+```
+
+---
+
+## STORAGE STRATEGY
+
+### S3 Buckets (MinIO on Spark)
+
+```
+s3://jessica/
+├── models/
+│   ├── sdxl/
+│   │   ├── base-1.0.safetensors
+│   │   ├── refiner-1.0.safetensors
+│   │   └── loras/
+│   ├── wan/
+│   │   └── wan-2.1-i2v.safetensors
+│   ├── llm/
+│   │   └── llama-3.1-70b-Q4/
+│   ├── tts/
+│   │   └── xtts-v2/
+│   └── music/
+│       └── musicgen-large/
+├── outputs/
+│   ├── images/
+│   ├── videos/
+│   ├── audio/
+│   └── temp/
+├── configs/
+│   ├── nodes/
+│   └── templates/
+└── backups/
+    └── {date}/
+```
+
+### NFS Mount (Fast Model Access)
+
+```
+Spark:/mnt/models → All nodes mount as /mnt/spark-models
+
+Models loaded via NFS (fast LAN) not S3 (slower)
+S3 used for outputs, configs, backups
+```
+
+---
+
+## NETWORK DESIGN
+
+### Docker Networks
+
+```yaml
+networks:
+  # Management network
+  fleet-mgmt:
+    driver: overlay
+    attachable: true
+    
+  # Service mesh (all AI services)
+  jessica-mesh:
+    driver: overlay
+    attachable: true
+    
+  # Camera network (isolated)
+  camera-net:
+    driver: overlay
+    internal: true
+```
+
+### Service Discovery
+
+```
+# Services find each other by name
+sdxl-api.jessica-mesh     → VISION cluster
+wan-api.jessica-mesh      → VIDEO cluster  
+llm-api.jessica-mesh      → BRAIN cluster
+tts-api.jessica-mesh      → VOICE cluster
+jessica-core.jessica-mesh → Spark
+```
+
+---
+
+## FLEET COMMANDER UI ADDITIONS
+
+### Cluster View
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  CLUSTER OVERVIEW                                              │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐          │
+│  │ VISION  │  │ VIDEO   │  │ VOICE   │  │ AUDIO   │          │
+│  │ ██████░░│  │ ████░░░░│  │ ██░░░░░░│  │ ░░░░░░░░│          │
+│  │ 2/2     │  │ 2/2     │  │ 1/1     │  │ 1/1     │          │
+│  │ 12 jobs │  │ 3 jobs  │  │ 0 jobs  │  │ 0 jobs  │          │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘          │
+│                                                                │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                       │
+│  │ BRAIN   │  │ EYES    │  │ JESSICA │                       │
+│  │ ████████│  │ ██████░░│  │ ████░░░░│                       │
+│  │ 2/2     │  │ 1/1     │  │ 1/1     │                       │
+│  │ 45 jobs │  │ stream  │  │ active  │                       │
+│  └─────────┘  └─────────┘  └─────────┘                       │
+│                                                                │
+│  ROAMER POOL ─────────────────────────────────────────────    │
+│  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                         │
+│  │ 11 │ │ 12 │ │ 13 │ │ 14 │ │ 15 │                         │
+│  │IDLE│ │SDXL│ │IDLE│ │IDLE│ │ WAN│                         │
+│  │ ░░ │ │ ██ │ │ ░░ │ │ ░░ │ │ ██ │                         │
+│  └────┘ └────┘ └────┘ └────┘ └────┘                         │
+│   Ready  Busy   Ready  Ready  Busy                           │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Roamer Assignment UI
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ASSIGN ROAMER                                    [×]          │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  Select Roamer:  [AGX-11 ▼] (IDLE)                            │
+│                                                                │
+│  Assign To:      ○ VISION (SDXL)                              │
+│                  ○ VIDEO (WAN)                                 │
+│                  ○ VOICE (TTS)                                 │
+│                  ○ BRAIN (LLM)                                 │
+│                  ● CUSTOM                                      │
+│                                                                │
+│  Custom Image:   [jessica/experimental:latest    ]            │
+│                                                                │
+│  Duration:       ○ Until idle (auto-cleanup)                  │
+│                  ○ Fixed time: [__] minutes                   │
+│                  ● Manual (cleanup on command)                 │
+│                                                                │
+│                          [Cancel]  [Assign]                    │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## IMPLEMENTATION PHASES
+
+### Phase 1: Infrastructure (Week 1)
+- [ ] Spark: Swarm init, Portainer, Traefik, S3 buckets
+- [ ] Network: Overlay networks created
+- [ ] Registry: Local Docker registry on Spark
+
+### Phase 2: Dedicated Clusters (Week 2)
+- [ ] Build Docker images for each service
+- [ ] Deploy VISION cluster (SDXL)
+- [ ] Deploy VIDEO cluster (WAN)
+- [ ] Deploy VOICE cluster (TTS)
+- [ ] Deploy AUDIO cluster (Music)
+- [ ] Deploy BRAIN cluster (LLM)
+- [ ] Deploy EYES cluster (Camera)
+- [ ] Deploy JESSICA cluster
+
+### Phase 3: Roamer System (Week 3)
+- [ ] Roamer agent development
+- [ ] Job queue system (Redis)
+- [ ] Auto-provisioning logic
+- [ ] Cleanup automation
+- [ ] Template system
+
+### Phase 4: Jessica Integration (Week 4)
+- [ ] Jessica Core routing logic
+- [ ] Multi-modal request handling
+- [ ] Cross-cluster coordination
+- [ ] Memory/context persistence
+
+### Phase 5: Fleet Commander UI (Week 5)
+- [ ] Cluster view
+- [ ] Roamer management
+- [ ] Job queue visualization
+- [ ] Real-time metrics
+
+### Phase 6: Polish & Claude Code (Week 6)
+- [ ] MCP integration
+- [ ] Documentation
+- [ ] Testing
+- [ ] Monitoring/alerting
+
+---
+
+## QUESTIONS TO RESOLVE
+
+1. **Node Assignment** - Confirm which physical AGX goes to which cluster?
+2. **Camera Node** - Which AGX has the 4 cameras?
+3. **Model Sizes** - What models fit on Xavier's 32GB? Need to verify each.
+4. **Jessica Architecture** - How does Jessica Core coordinate with personality module?
+5. **Priority** - Which cluster to build first?
+
+---
+
+## NEXT STEPS
+
+1. Confirm node assignments
+2. Start with Spark infrastructure
+3. Build first dedicated cluster (recommend BRAIN or VISION)
+4. Then roamer system
+5. Then UI
+
+Ready to proceed?

@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  fleet-commander-ui:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - fleet-network
+    depends_on:
+      - fleet-commander-api
+
+  fleet-commander-api:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      - ENV=production
+      # Connection strings for existing services
+      - REDIS_URL=redis://comfyui-redis:6379
+      - POSTGRES_URL=postgresql://comfyui:comfyui123@comfyui-postgres:5432/comfyui
+      - MINIO_URL=http://comfyui-minio:9000
+      - OLLAMA_URL=http://jessica-ollama-gb10:11434
+      - LLM_MONITOR_URL=http://fleet-llm-monitor:8766
+      # Fleet Doctor Configuration
+      - FLEET_DOCTOR_ENABLED=true
+      - FLEET_DOCTOR_MODEL=deepseek-coder:6.7b
+      - FLEET_DOCTOR_INTERVAL=30
+      - FLEET_DOCTOR_AUTO_FIX=true
+      - FLEET_DOCTOR_DISK_THRESHOLD=85
+      - FLEET_DOCTOR_MEMORY_THRESHOLD=90
+    volumes:
+      - ./bootstrap:/app/bootstrap_static
+      - ./backend/api:/app/api  # Mount API code for live updates
+      - ./backend/main.py:/app/main.py  # Mount main.py for route updates
+      - /var/run/docker.sock:/var/run/docker.sock
+      # S3/MinIO data mounts for gallery and loras
+      - /mnt/docker/volumes/comfyui_minio-data/_data/fleet-outputs:/data/fleet-outputs
+      - /mnt/docker/volumes/comfyui_minio-data/_data/fleet-loras:/data/fleet-loras
+      - /mnt/docker/volumes/comfyui_minio-data/_data/fleet-models:/data/fleet-models
+    networks:
+      - fleet-network
+      - comfyui_net
+      - jessica_net
+    depends_on:
+      - fleet-llm-monitor
+
+  fleet-llm-monitor:
+    build: ./llm-monitor
+    restart: unless-stopped
+    ports:
+      - "8766:8766"
+    environment:
+      - REDIS_URL=redis://comfyui-redis:6379
+      - OLLAMA_URL=http://jessica-ollama-gb10:11434
+      - PROXY_MODEL=gpt2
+    networks:
+      - fleet-network
+      - comfyui_net
+      - jessica_net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  fleet-network:
+    driver: bridge
+  comfyui_net:
+    external: true
+    name: comfyui_comfyui-network
+  jessica_net:
+    external: true
+    name: jessicav3_jessica-network

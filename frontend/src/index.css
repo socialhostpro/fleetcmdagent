@@ -1,0 +1,690 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Backgrounds */
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a24;
+  --bg-hover: #22222e;
+
+  /* Borders */
+  --border-subtle: #2a2a3a;
+  --border-default: #3a3a4a;
+  --border-bright: #4a4a5a;
+
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0b0;
+  --text-muted: #606070;
+  --text-accent: #00d4ff;
+
+  /* Status */
+  --status-online: #00ff88;
+  --status-warning: #ffaa00;
+  --status-error: #ff4444;
+  --status-offline: #666666;
+  --status-busy: #00aaff;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-bright);
+}
+
+/* React Flow customizations */
+.react-flow__node {
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__background {
+  background-color: var(--bg-primary) !important;
+}
+
+.react-flow__minimap {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.react-flow__controls {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.react-flow__controls-button {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-subtle);
+  fill: var(--text-secondary);
+}
+
+.react-flow__controls-button:hover {
+  background-color: var(--bg-hover);
+}
+
+/* Progress bar animations */
+@keyframes progressPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.progress-bar-animated {
+  animation: progressPulse 2s ease-in-out infinite;
+}
+
+/* Glow effects */
+.glow-online {
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+}
+
+.glow-warning {
+  box-shadow: 0 0 10px rgba(255, 170, 0, 0.4);
+}
+
+.glow-error {
+  box-shadow: 0 0 10px rgba(255, 68, 68, 0.4);
+}
+
+.glow-spark {
+  box-shadow: 0 0 20px rgba(118, 185, 0, 0.3);
+}
+
+/* Animated edge flow */
+@keyframes flowAnimation {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.edge-animated {
+  stroke-dasharray: 6;
+  animation: flowAnimation 1s linear infinite;
+}
+
+/* Node card styles */
+.node-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.node-card:hover {
+  border-color: var(--border-bright);
+  transform: translateY(-2px);
+}
+
+.node-card.selected {
+  border-color: var(--text-accent);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+}
+
+/* Status dot */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background-color: var(--status-online);
+  box-shadow: 0 0 6px var(--status-online);
+}
+
+.status-dot.warning {
+  background-color: var(--status-warning);
+  box-shadow: 0 0 6px var(--status-warning);
+}
+
+.status-dot.error {
+  background-color: var(--status-error);
+  box-shadow: 0 0 6px var(--status-error);
+}
+
+.status-dot.offline {
+  background-color: var(--status-offline);
+}
+
+/* Metric bar */
+.metric-bar {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.metric-bar-fill.cpu {
+  background: linear-gradient(90deg, #3498db, #00d4ff);
+}
+
+.metric-bar-fill.gpu {
+  background: linear-gradient(90deg, #76b900, #9bec00);
+}
+
+.metric-bar-fill.ram {
+  background: linear-gradient(90deg, #9b59b6, #e91e63);
+}
+
+.metric-bar-fill.disk {
+  background: linear-gradient(90deg, #f39c12, #ffaa00);
+}
+
+/* High usage warning colors */
+.metric-bar-fill.high {
+  background: linear-gradient(90deg, #ff4444, #ff6b6b) !important;
+}
+
+/* ===========================================
+   Electric Border Effect (Active/Computing)
+   Based on: https://codepen.io/BalintFerenczy/pen/KwdoyEN
+   =========================================== */
+
+/* Container for the electric border effect */
+.electric-border-container {
+  position: relative;
+}
+
+/* Electric border pseudo-element */
+.electric-border {
+  position: relative;
+  isolation: isolate;
+}
+
+.electric-border::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 12px;
+  background: conic-gradient(
+    from var(--electric-angle, 0deg),
+    #00ff88 0deg,
+    #00d4ff 60deg,
+    #00ff88 120deg,
+    #00d4ff 180deg,
+    #00ff88 240deg,
+    #00d4ff 300deg,
+    #00ff88 360deg
+  );
+  filter: blur(4px);
+  opacity: 0.8;
+  z-index: -1;
+  animation: electric-rotate 3s linear infinite;
+}
+
+.electric-border::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 11px;
+  background: conic-gradient(
+    from calc(var(--electric-angle, 0deg) + 180deg),
+    transparent 0deg,
+    #00ffaa 30deg,
+    transparent 60deg,
+    #00aaff 90deg,
+    transparent 120deg,
+    #00ffaa 150deg,
+    transparent 180deg,
+    #00aaff 210deg,
+    transparent 240deg,
+    #00ffaa 270deg,
+    transparent 300deg,
+    #00aaff 330deg,
+    transparent 360deg
+  );
+  filter: blur(2px);
+  opacity: 0.6;
+  z-index: -1;
+  animation: electric-rotate 2s linear infinite reverse;
+}
+
+@property --electric-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes electric-rotate {
+  from {
+    --electric-angle: 0deg;
+  }
+  to {
+    --electric-angle: 360deg;
+  }
+}
+
+/* Electric shimmer/pulse effect */
+.electric-border-pulse::before {
+  animation: electric-rotate 3s linear infinite, electric-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes electric-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    filter: blur(4px);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(6px);
+  }
+}
+
+/* Intense version for computing state */
+.electric-border-intense::before {
+  background: conic-gradient(
+    from var(--electric-angle, 0deg),
+    #00ff88 0deg,
+    #ffffff 30deg,
+    #00d4ff 60deg,
+    #ffffff 90deg,
+    #00ff88 120deg,
+    #ffffff 150deg,
+    #00d4ff 180deg,
+    #ffffff 210deg,
+    #00ff88 240deg,
+    #ffffff 270deg,
+    #00d4ff 300deg,
+    #ffffff 330deg,
+    #00ff88 360deg
+  );
+  filter: blur(6px);
+  opacity: 0.9;
+  animation: electric-rotate 2s linear infinite, electric-pulse 1s ease-in-out infinite;
+}
+
+.electric-border-intense::after {
+  opacity: 0.8;
+  animation: electric-rotate 1.5s linear infinite reverse;
+}
+
+/* Clean inner background to cover the bleeding */
+.electric-border > .electric-inner {
+  position: relative;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  z-index: 1;
+}
+
+/* GPU Computing specific - green theme */
+.electric-border-gpu::before {
+  background: conic-gradient(
+    from var(--electric-angle, 0deg),
+    #76b900 0deg,
+    #9bec00 60deg,
+    #00ff88 120deg,
+    #9bec00 180deg,
+    #76b900 240deg,
+    #00ff88 300deg,
+    #76b900 360deg
+  );
+}
+
+/* Warning theme - orange */
+.electric-border-warning::before {
+  background: conic-gradient(
+    from var(--electric-angle, 0deg),
+    #ffaa00 0deg,
+    #ff6600 60deg,
+    #ffcc00 120deg,
+    #ff6600 180deg,
+    #ffaa00 240deg,
+    #ffcc00 300deg,
+    #ffaa00 360deg
+  );
+}
+
+/* Error theme - red */
+.electric-border-error::before {
+  background: conic-gradient(
+    from var(--electric-angle, 0deg),
+    #ff4444 0deg,
+    #ff0000 60deg,
+    #ff6b6b 120deg,
+    #ff0000 180deg,
+    #ff4444 240deg,
+    #ff6b6b 300deg,
+    #ff4444 360deg
+  );
+}
+
+/* ===========================================
+   Turbulent Electric Border (jh3y Design)
+   Uses SVG feTurbulence for animated distortion
+   =========================================== */
+
+/* Turbulent electric card container */
+.electric-card {
+  position: relative;
+  border-radius: 12px;
+  padding: 2px;
+  background: linear-gradient(
+    -30deg,
+    rgba(118, 185, 0, 0.15),
+    transparent,
+    rgba(0, 212, 255, 0.15)
+  ),
+  linear-gradient(
+    to bottom,
+    var(--bg-tertiary),
+    var(--bg-tertiary)
+  );
+}
+
+/* Inner container for turbulent effect */
+.electric-card-inner {
+  position: relative;
+}
+
+/* The actual border element with turbulence filter */
+.electric-card-border {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--status-online);
+  border-radius: 12px;
+  filter: url(#electric-turbulence-green);
+  pointer-events: none;
+}
+
+/* Glow layers for depth */
+.electric-card-glow-1 {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(118, 185, 0, 0.6);
+  border-radius: 12px;
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.electric-card-glow-2 {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--status-online);
+  border-radius: 12px;
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+/* Background glow effect */
+.electric-card-bg-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  filter: blur(24px);
+  transform: scale(1.1);
+  opacity: 0.25;
+  z-index: -1;
+  background: linear-gradient(
+    -30deg,
+    var(--status-online),
+    transparent,
+    #00d4ff
+  );
+  pointer-events: none;
+}
+
+/* ===========================================
+   Glassmorphism Components (charge design)
+   =========================================== */
+
+/* Glass panel effect */
+.glass-panel {
+  background: radial-gradient(
+    47.2% 50% at 50.39% 88.37%,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0) 100%
+  ),
+  rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
+  position: relative;
+  transition: background 0.3s ease;
+}
+
+.glass-panel:hover {
+  background: radial-gradient(
+    47.2% 50% at 50.39% 88.37%,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0) 100%
+  ),
+  rgba(255, 255, 255, 0.05);
+}
+
+/* Glass panel border effect */
+.glass-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.35) 16.73%,
+    rgba(255, 255, 255, 0.06) 30.2%,
+    rgba(255, 255, 255, 0.06) 68.2%,
+    rgba(255, 255, 255, 0.4) 81.89%
+  );
+  border-radius: inherit;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+/* Glass tag/badge */
+.glass-tag {
+  background: radial-gradient(
+    47.2% 50% at 50.39% 88.37%,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0) 100%
+  ),
+  rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 6px 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.8);
+  position: relative;
+}
+
+.glass-tag::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.4) 16.73%,
+    rgba(255, 255, 255, 0.08) 30.2%,
+    rgba(255, 255, 255, 0.08) 68.2%,
+    rgba(255, 255, 255, 0.5) 81.89%
+  );
+  border-radius: inherit;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+/* Glass divider */
+.glass-divider {
+  border: none;
+  height: 1px;
+  background-color: currentColor;
+  opacity: 0.1;
+  mask-image: linear-gradient(to right, transparent, black, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black, transparent);
+}
+
+/* Accent colored glass panels */
+.glass-panel-accent {
+  background: radial-gradient(
+    47.2% 50% at 50.39% 88.37%,
+    rgba(0, 212, 255, 0.08) 0%,
+    rgba(0, 212, 255, 0) 100%
+  ),
+  rgba(0, 212, 255, 0.03);
+}
+
+.glass-panel-accent::before {
+  background: linear-gradient(
+    150deg,
+    rgba(0, 212, 255, 0.4) 16.73%,
+    rgba(0, 212, 255, 0.08) 30.2%,
+    rgba(0, 212, 255, 0.08) 68.2%,
+    rgba(0, 212, 255, 0.5) 81.89%
+  );
+}
+
+.glass-panel-success {
+  background: radial-gradient(
+    47.2% 50% at 50.39% 88.37%,
+    rgba(0, 255, 136, 0.08) 0%,
+    rgba(0, 255, 136, 0) 100%
+  ),
+  rgba(0, 255, 136, 0.03);
+}
+
+.glass-panel-success::before {
+  background: linear-gradient(
+    150deg,
+    rgba(0, 255, 136, 0.4) 16.73%,
+    rgba(0, 255, 136, 0.08) 30.2%,
+    rgba(0, 255, 136, 0.08) 68.2%,
+    rgba(0, 255, 136, 0.5) 81.89%
+  );
+}
+
+.glass-panel-warning {
+  background: radial-gradient(
+    47.2% 50% at 50.39% 88.37%,
+    rgba(255, 170, 0, 0.08) 0%,
+    rgba(255, 170, 0, 0) 100%
+  ),
+  rgba(255, 170, 0, 0.03);
+}
+
+.glass-panel-warning::before {
+  background: linear-gradient(
+    150deg,
+    rgba(255, 170, 0, 0.4) 16.73%,
+    rgba(255, 170, 0, 0.08) 30.2%,
+    rgba(255, 170, 0, 0.08) 68.2%,
+    rgba(255, 170, 0, 0.5) 81.89%
+  );
+}
+
+.glass-panel-error {
+  background: radial-gradient(
+    47.2% 50% at 50.39% 88.37%,
+    rgba(255, 68, 68, 0.08) 0%,
+    rgba(255, 68, 68, 0) 100%
+  ),
+  rgba(255, 68, 68, 0.03);
+}
+
+.glass-panel-error::before {
+  background: linear-gradient(
+    150deg,
+    rgba(255, 68, 68, 0.4) 16.73%,
+    rgba(255, 68, 68, 0.08) 30.2%,
+    rgba(255, 68, 68, 0.08) 68.2%,
+    rgba(255, 68, 68, 0.5) 81.89%
+  );
+}
+
+/* ===========================================
+   Enhanced Overlay Effects
+   =========================================== */
+
+.overlay-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.8;
+  mix-blend-mode: overlay;
+  transform: scale(1.05);
+  filter: blur(12px);
+  background: linear-gradient(
+    -30deg,
+    rgba(255, 255, 255, 0.3),
+    transparent 30%,
+    transparent 70%,
+    rgba(255, 255, 255, 0.3)
+  );
+  pointer-events: none;
+}
+
+/* Active/computing state overlay */
+.overlay-active {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    -30deg,
+    rgba(118, 185, 0, 0.2),
+    transparent,
+    rgba(0, 212, 255, 0.2)
+  );
+  filter: blur(20px);
+  opacity: 0.6;
+  z-index: -1;
+  animation: pulse-glow 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}

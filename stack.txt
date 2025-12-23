@@ -1,0 +1,23 @@
+FULL APPLICATION STACK
+CategoryAppsLocationImage GenSDXL, FLUX, ControlNet, IP-Adapter, InpaintingAGX-03 / SparkImage EditRealESRGAN, GFPGAN, ImageMagick, GIMP ServerAGX-05/06 / SparkVideo GenWAN-2.1 (I2V/T2V), AnimateDiffAGX-04Video ProcRIFE, FILM, FFmpeg (GPU), Video MattingAGX-05 / SparkLip SyncWav2Lip, SadTalker, Live PortraitAGX-06FaceGFPGAN, FaceSwap, Expression TransferAGX-06VoiceWhisper-V3, XTTS, Bark, RVC, DemucsAGX-10MusicMusicGen, AudioCraft, RiffusionAGX-11 (dedicated)VisionYOLOv8, LLaVA, Depth, OCR, BLIP, 4x CamerasAGX-01, AGX-02LLMLlama-70B (NP4/sharded), Llama-8B, MistralSpark / AGX-07-09RoboticsIsaac Sim, Unitree ROS2Spark (heavy)InfraTraefik, PostgreSQL+pgvector, MinIO, Redis, Portainer, Browser AgentSpark
+
+KEY ADDITIONS
+Lip Sync Pipeline:
+Audio → Whisper (timing) → Wav2Lip/SadTalker → GFPGAN (enhance) → FFmpeg (assemble)
+Background Music Pipeline:
+Prompt → MusicGen → FFmpeg (volume, fade, duck under speech) → Mix with video
+FFmpeg (GPU-accelerated):
+
+Transcode with NVENC
+Frame extraction/assembly
+Audio mixing with sidechain
+Subtitle burning
+Format conversion
+
+Image Editing:
+
+ImageMagick API (resize, crop, filters, text, composite)
+GIMP Server (advanced: liquify, heal, color grade)
+
+XAVIER CLUSTER LAYOUT
+NodesClusterJobStatusAGX-01, 02VISIONSDXLDedicatedAGX-03, 04VIDEOWANDedicatedAGX-05VOICETTSDedicatedAGX-06AUDIOMusicDedicatedAGX-07, 08BRAINLLMDedicatedAGX-09EYES4x CamerasDedicatedAGX-10JESSICAPersonalityDedicatedAGX-11-15ROAMERSDynamicEphemeral

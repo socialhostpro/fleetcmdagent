@@ -1,0 +1,50 @@
+# Portainer CE for Fleet Commander
+# Manages Docker Swarm and all AGX nodes
+#
+# Access: https://192.168.1.214:9443 (or http://localhost:9000)
+
+version: '3.8'
+
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    ports:
+      - "8000:8000"   # Edge Agent tunnel
+      - "9000:9000"   # HTTP (legacy)
+      - "9443:9443"   # HTTPS
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    environment:
+      # Auto-discover local Swarm
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    networks:
+      - fleet-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Optional: Portainer Agent for this host (if not using socket)
+  # Uncomment if you prefer agent-based connection
+  # portainer-agent:
+  #   image: portainer/agent:latest
+  #   container_name: portainer_agent
+  #   restart: always
+  #   ports:
+  #     - "9001:9001"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - /var/lib/docker/volumes:/var/lib/docker/volumes
+
+volumes:
+  portainer_data:
+    external: true
+    name: portainer_data
+
+networks:
+  fleet-network:
+    external: true
+    name: agxcloudcommander_fleet-network

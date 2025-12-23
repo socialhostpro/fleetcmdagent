@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import asyncio
 import os
-from api import nodes, swarm, network, ssh, vault, install, websocket, cluster, maintenance, build, director, benchmark, discovery, images, install_queue, queue, ai, llm_monitor, doctor, vision_scheduler, fleet, outputs
+from api import nodes, swarm, network, ssh, vault, install, websocket, cluster, maintenance, build, director, benchmark, discovery, images, install_queue, queue, ai, llm_monitor, doctor, vision_scheduler, fleet, outputs, agents, alerts
 
 # Global autoscaler instance
 autoscaler = None
@@ -14,11 +14,15 @@ autoscaler_task = None
 fleet_doctor_instance = None
 fleet_doctor_task = None
 
+# Global alert manager instance
+alert_manager_instance = None
+alert_manager_task = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage app startup and shutdown."""
-    global autoscaler, autoscaler_task, fleet_doctor_instance, fleet_doctor_task
+    global autoscaler, autoscaler_task, fleet_doctor_instance, fleet_doctor_task, alert_manager_instance, alert_manager_task
 
     # Startup: Initialize autoscaler if enabled
     autoscaler_enabled = os.environ.get("AUTOSCALER_ENABLED", "false").lower() == "true"
@@ -55,7 +59,36 @@ async def lifespan(app: FastAPI):
         fleet_doctor_task = asyncio.create_task(fleet_doctor_instance.run())
         print(f"Fleet Doctor started in background (model: {model})")
 
+    # Startup: Initialize Alert Manager if enabled (default: true)
+    alert_manager_enabled = os.environ.get("ALERT_MANAGER_ENABLED", "true").lower() == "true"
+    if alert_manager_enabled:
+        from services.alert_manager import AlertManager
+        import services.alert_manager as alert_module
+
+        redis_url = os.environ.get("REDIS_URL", "redis://comfyui-redis:6379")
+        alert_manager_instance = AlertManager(redis_url=redis_url)
+        await alert_manager_instance.connect()
+
+        # Set the global instance for API access
+        alert_module.alert_manager = alert_manager_instance
+
+        # Start the monitoring loop
+        alert_manager_task = asyncio.create_task(alert_manager_instance.run())
+        print("Alert Manager started in background")
+
     yield
+
+    # Shutdown: Stop Alert Manager
+    if alert_manager_instance:
+        alert_manager_instance.stop()
+        if alert_manager_task:
+            alert_manager_task.cancel()
+            try:
+                await alert_manager_task
+            except asyncio.CancelledError:
+                pass
+        await alert_manager_instance.disconnect()
+        print("Alert Manager stopped")
 
     # Shutdown: Stop Fleet Doctor
     if fleet_doctor_instance:
@@ -118,6 +151,8 @@ app.include_router(doctor.router, prefix="/api/doctor", tags=["doctor"])
 app.include_router(vision_scheduler.router, prefix="/api/vision", tags=["vision"])
 app.include_router(fleet.router, prefix="/api/fleet", tags=["fleet"])
 app.include_router(outputs.router, prefix="/api/outputs", tags=["outputs"])
+app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 
 # WebSocket routes (no prefix - mounted at root)
 app.include_router(websocket.router, tags=["websocket"])

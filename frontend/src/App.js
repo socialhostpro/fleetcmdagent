@@ -1,168 +1,122 @@
-import React, { useState, createContext, useContext } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
-import DetailPanel from './components/DetailPanel';
-import AIChat from './components/AIChat';
-import CanvasView from './pages/CanvasView';
-import NetworkView from './pages/NetworkView';
-import ClustersView from './pages/ClustersView';
-import MetricsView from './pages/MetricsView';
-import DockerView from './pages/DockerView';
-import WorkflowDesigner from './pages/WorkflowDesigner';
-import SettingsView from './pages/SettingsView';
-import ArchitectureView from './pages/ArchitectureView';
-import QueueView from './pages/QueueView';
-import LLMMonitorView from './pages/LLMMonitorView';
-import FleetDoctorView from './pages/FleetDoctorView';
-import { Bell, Search, Settings, User, ChevronDown, Bot } from 'lucide-react';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard, Network, Briefcase, Users, Settings,
+  Menu, X, Bell, Wifi, WifiOff
+} from 'lucide-react';
+import { useFleetWebSocket } from './hooks/useFleetWebSocket';
+import { useAlertStore } from './stores';
 import './index.css';
 
-// Context for selected node (shared between canvas and detail panel)
-const SelectedNodeContext = createContext(null);
+// Views
+import DashboardView from './pages/DashboardView';
+import TopologyView from './pages/TopologyView';
+import JobsView from './pages/JobsView';
+import AgentsView from './pages/AgentsView';
+import SettingsView from './pages/SettingsView';
 
-export const useSelectedNode = () => useContext(SelectedNodeContext);
+// Navigation items
+const NAV_ITEMS = [
+  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/topology', icon: Network, label: 'Topology' },
+  { path: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { path: '/agents', icon: Users, label: 'Agents' },
+  { path: '/settings', icon: Settings, label: 'Settings' },
+];
 
-// Placeholder components for new routes
-const PlaceholderView = ({ title }) => (
-  <div className="flex-1 flex items-center justify-center bg-bg-primary">
-    <div className="text-center">
-      <h2 className="text-xl font-bold text-text-primary mb-2">{title}</h2>
-      <p className="text-text-muted">Coming soon...</p>
-    </div>
-  </div>
-);
-
-function App() {
-  const [selectedNode, setSelectedNode] = useState(null);
-  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+function Navigation() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const location = useLocation();
+  const { connected } = useFleetWebSocket();
+  const unacknowledgedCount = useAlertStore(state => state.unacknowledgedCount);
 
   return (
-    <SelectedNodeContext.Provider value={{ selectedNode, setSelectedNode }}>
-      <Router>
-        <div className="flex h-screen bg-bg-primary text-text-primary overflow-hidden">
-          <Sidebar />
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Header */}
-            <header className="h-14 bg-bg-secondary border-b border-border-subtle flex items-center px-4 shrink-0">
-              {/* Left: Logo & Title */}
-              <div className="flex items-center gap-3">
-                <h1 className="font-bold text-lg tracking-wide text-text-primary">
-                  FLEET COMMANDER
-                </h1>
-                <button className="flex items-center gap-1 px-2 py-1 rounded bg-bg-tertiary border border-border-subtle text-sm text-text-secondary hover:text-text-primary hover:border-border-bright transition-colors">
-                  Canvas
-                  <ChevronDown size={14} />
-                </button>
-              </div>
+    <nav className={`bg-gray-800 border-r border-gray-700 flex flex-col transition-all duration-300 ${
+      isCollapsed ? 'w-16' : 'w-64'
+    }`}>
+      {/* Header */}
+      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-700">
+        {!isCollapsed && (
+          <span className="font-bold text-lg text-white">Fleet Commander</span>
+        )}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+        >
+          {isCollapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
+        </button>
+      </div>
 
-              {/* Center: Search */}
-              <div className="flex-1 flex justify-center px-8">
-                <div className="relative w-full max-w-md">
-                  <Search
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search nodes, services... (Cmd+K)"
-                    className="w-full bg-bg-tertiary border border-border-subtle rounded-lg pl-10 pr-4 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-text-accent transition-colors"
-                  />
-                </div>
-              </div>
+      {/* Nav Items */}
+      <div className="flex-1 py-4">
+        {NAV_ITEMS.map(({ path, icon: Icon, label }) => {
+          const isActive = location.pathname === path;
+          return (
+            <NavLink
+              key={path}
+              to={path}
+              className={`flex items-center gap-3 px-4 py-3 mx-2 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+              }`}
+            >
+              <Icon className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span>{label}</span>}
+            </NavLink>
+          );
+        })}
+      </div>
 
-              {/* Right: Actions */}
-              <div className="flex items-center gap-2">
-                {/* Status Badge */}
-                <span className="text-xs text-status-online px-2 py-1 bg-status-online/10 rounded border border-status-online/20 mr-2">
-                  SYSTEM ONLINE
-                </span>
-
-                {/* AI Assistant */}
-                <button
-                  onClick={() => setIsAIChatOpen(!isAIChatOpen)}
-                  className={`p-2 rounded-lg transition-colors ${isAIChatOpen ? 'bg-text-accent/20 text-text-accent' : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'}`}
-                  title="Fleet Commander AI"
-                >
-                  <Bot size={18} />
-                </button>
-
-                {/* Notifications */}
-                <button className="relative p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors">
-                  <Bell size={18} />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-status-error rounded-full" />
-                </button>
-
-                {/* Settings */}
-                <button className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors">
-                  <Settings size={18} />
-                </button>
-
-                {/* User */}
-                <button className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors">
-                  <User size={18} />
-                </button>
-              </div>
-            </header>
-
-            {/* Main Content Area */}
-            <div className="flex-1 flex overflow-hidden">
-              {/* Main View */}
-              <main className="flex-1 relative overflow-hidden">
-                <Routes>
-                  <Route
-                    path="/"
-                    element={
-                      <CanvasViewWrapper
-                        setSelectedNode={setSelectedNode}
-                      />
-                    }
-                  />
-                  <Route path="/network" element={<NetworkView />} />
-                  <Route path="/clusters" element={<ClustersView />} />
-                  <Route path="/docker" element={<DockerView />} />
-                  <Route path="/architecture" element={<ArchitectureView />} />
-                  <Route path="/terminals" element={<PlaceholderView title="Terminals" />} />
-                  <Route path="/storage" element={<PlaceholderView title="Storage / S3 View" />} />
-                  <Route path="/backups" element={<PlaceholderView title="Backups View" />} />
-                  <Route path="/jobs" element={<QueueView />} />
-                  <Route path="/workflow" element={<WorkflowDesigner />} />
-                  <Route path="/metrics" element={<MetricsView />} />
-                  <Route path="/llm-monitor" element={<LLMMonitorView />} />
-                  <Route path="/doctor" element={<FleetDoctorView />} />
-                  <Route path="/isaac" element={<PlaceholderView title="Isaac / Robotics" />} />
-                  <Route path="/comfyui" element={<PlaceholderView title="ComfyUI Link" />} />
-                  <Route path="/settings" element={<SettingsView />} />
-                </Routes>
-              </main>
-
-              {/* Detail Panel (shown when node selected) */}
-              {selectedNode && (
-                <DetailPanel
-                  node={selectedNode}
-                  onClose={() => setSelectedNode(null)}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* AI Chat Panel */}
-          <AIChat
-            isOpen={isAIChatOpen}
-            onClose={() => setIsAIChatOpen(false)}
-          />
+      {/* Footer */}
+      <div className="p-4 border-t border-gray-700">
+        {/* Connection Status */}
+        <div className={`flex items-center gap-2 ${isCollapsed ? 'justify-center' : ''}`}>
+          {connected ? (
+            <Wifi className="w-4 h-4 text-green-400" />
+          ) : (
+            <WifiOff className="w-4 h-4 text-red-400" />
+          )}
+          {!isCollapsed && (
+            <span className={`text-sm ${connected ? 'text-green-400' : 'text-red-400'}`}>
+              {connected ? 'Connected' : 'Disconnected'}
+            </span>
+          )}
         </div>
-      </Router>
-    </SelectedNodeContext.Provider>
+
+        {/* Alerts indicator */}
+        {unacknowledgedCount > 0 && (
+          <div className={`flex items-center gap-2 mt-2 ${isCollapsed ? 'justify-center' : ''}`}>
+            <Bell className="w-4 h-4 text-yellow-400" />
+            {!isCollapsed && (
+              <span className="text-sm text-yellow-400">
+                {unacknowledgedCount} alert{unacknowledgedCount > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </nav>
   );
 }
 
-// Wrapper to pass selection handlers to CanvasView
-const CanvasViewWrapper = ({ setSelectedNode }) => {
+function App() {
   return (
-    <div className="h-full w-full">
-      <CanvasView onNodeSelect={setSelectedNode} />
-    </div>
+    <Router>
+      <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
+        <Navigation />
+        <main className="flex-1 overflow-auto">
+          <Routes>
+            <Route path="/" element={<DashboardView />} />
+            <Route path="/topology" element={<TopologyView />} />
+            <Route path="/jobs" element={<JobsView />} />
+            <Route path="/agents" element={<AgentsView />} />
+            <Route path="/settings" element={<SettingsView />} />
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
-};
+}
 
 export default App;
